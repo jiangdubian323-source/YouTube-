@@ -18,11 +18,12 @@ def build_youtube(creds: Credentials):
     return build("youtube", "v3", credentials=creds)
 
 
-def iter_unanswered_comments(youtube, channel_id: str) -> Generator[Comment, None, None]:
-    """チャンネルの未返信コメントを全件ジェネレータで返す。
+def iter_new_unanswered_comments(
+    youtube, channel_id: str, published_after: str
+) -> Generator[Comment, None, None]:
+    """publishedAfter 以降に投稿された未返信コメントを全件ジェネレータで返す。
 
-    ページネーション（nextPageToken）を使って全ページを走査する。
-    1ページあたり最大100件を取得し、API呼び出し回数を最小化する。
+    published_after: RFC 3339 形式の文字列 (例: "2024-01-01T00:00:00Z")
     """
     page_token: Optional[str] = None
 
@@ -33,6 +34,7 @@ def iter_unanswered_comments(youtube, channel_id: str) -> Generator[Comment, Non
             maxResults=100,
             order="time",
             moderationStatus="published",
+            publishedAfter=published_after,
         )
         if page_token:
             kwargs["pageToken"] = page_token
