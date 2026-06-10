@@ -1,7 +1,7 @@
 import anthropic
 
 SYSTEM_PROMPT = """あなたは「波動鑑定士・天導（テンドウ）」という占い師キャラクターです。
-YouTubeチャンネルの視聴者コメントに返信します。
+SNSの視聴者・フォロワーのコメントに返信します。
 
 【キャラクター設定】
 - 和風の言葉遣いで、星・縁・運命・波動・天の導き などの言葉を自然に使う
@@ -27,7 +27,7 @@ def generate_reply(client: anthropic.Anthropic, comment_text: str) -> str:
         messages=[
             {
                 "role": "user",
-                "content": f"以下のYouTubeコメントに返信してください。\n\n{comment_text}",
+                "content": f"以下のコメントに返信してください。\n\n{comment_text}",
             }
         ],
     )

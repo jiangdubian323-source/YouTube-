@@ -1,6 +1,8 @@
 .env
 token.json
 last_run.json
+instagram_token.json
+instagram_last_run.json
 client_secret.json
 __pycache__/
 *.pyc
