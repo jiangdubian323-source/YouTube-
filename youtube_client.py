@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
+from typing import Generator, Optional
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 
@@ -12,27 +12,32 @@ class Comment:
     author: str
     text: str
     published_at: str
-    reply_count: int
 
 
 def build_youtube(creds: Credentials):
     return build("youtube", "v3", credentials=creds)
 
 
-def fetch_unanswered_comments(youtube, channel_id: str, max_results: int = 10) -> list[Comment]:
-    """チャンネルの未返信コメントを取得する。"""
-    comments: list[Comment] = []
+def iter_unanswered_comments(youtube, channel_id: str) -> Generator[Comment, None, None]:
+    """チャンネルの未返信コメントを全件ジェネレータで返す。
 
-    request = youtube.commentThreads().list(
-        part="snippet",
-        allThreadsRelatedToChannelId=channel_id,
-        maxResults=min(max_results, 100),
-        order="time",
-        moderationStatus="published",
-    )
+    ページネーション（nextPageToken）を使って全ページを走査する。
+    1ページあたり最大100件を取得し、API呼び出し回数を最小化する。
+    """
+    page_token: Optional[str] = None
 
-    while request and len(comments) < max_results:
-        response = request.execute()
+    while True:
+        kwargs = dict(
+            part="snippet",
+            allThreadsRelatedToChannelId=channel_id,
+            maxResults=100,
+            order="time",
+            moderationStatus="published",
+        )
+        if page_token:
+            kwargs["pageToken"] = page_token
+
+        response = youtube.commentThreads().list(**kwargs).execute()
 
         for item in response.get("items", []):
             snippet = item["snippet"]
@@ -46,21 +51,17 @@ def fetch_unanswered_comments(youtube, channel_id: str, max_results: int = 10) -
             if snippet.get("totalReplyCount", 0) > 0:
                 continue
 
-            comments.append(Comment(
+            yield Comment(
                 comment_id=item["snippet"]["topLevelComment"]["id"],
                 video_id=snippet.get("videoId", ""),
                 author=top.get("authorDisplayName", "名無し"),
                 text=top.get("textDisplay", ""),
                 published_at=top.get("publishedAt", ""),
-                reply_count=snippet.get("totalReplyCount", 0),
-            ))
+            )
 
-            if len(comments) >= max_results:
-                break
-
-        request = youtube.commentThreads().list_next(request, response)
-
-    return comments
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
 
 
 def post_reply(youtube, parent_id: str, reply_text: str) -> Optional[str]:
