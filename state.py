@@ -1,24 +1,34 @@
-"""前回実行時刻の保存・読み込み。"""
+"""前回実行時刻の保存・読み込み。GCS または ローカルファイルに保存する。"""
 from __future__ import annotations
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import gcs_backend
 
 STATE_FILE = Path("last_run.json")
+STATE_BLOB = "last_run.json"
 
 
 def load_last_run() -> str:
-    """前回実行時刻を RFC 3339 形式で返す。ファイルがなければ1時間前を返す。"""
-    if STATE_FILE.exists():
-        data = json.loads(STATE_FILE.read_text())
-        return data["last_run"]
+    """前回実行時刻を RFC 3339 形式で返す。記録がなければ1時間前を返す。"""
+    text = None
+    if gcs_backend.is_enabled():
+        text = gcs_backend.read_text(STATE_BLOB)
+    elif STATE_FILE.exists():
+        text = STATE_FILE.read_text()
+
+    if text:
+        return json.loads(text)["last_run"]
+
     # 初回起動時は直近1時間のコメントのみ対象にする
-    one_hour_ago = datetime.now(timezone.utc).replace(microsecond=0)
-    from datetime import timedelta
-    one_hour_ago -= timedelta(hours=1)
+    one_hour_ago = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)
     return one_hour_ago.isoformat().replace("+00:00", "Z")
 
 
 def save_last_run(dt: datetime) -> None:
     """実行時刻を保存する。"""
-    STATE_FILE.write_text(json.dumps({"last_run": dt.isoformat().replace("+00:00", "Z")}))
+    text = json.dumps({"last_run": dt.isoformat().replace("+00:00", "Z")})
+    if gcs_backend.is_enabled():
+        gcs_backend.write_text(STATE_BLOB, text)
+    else:
+        STATE_FILE.write_text(text)
