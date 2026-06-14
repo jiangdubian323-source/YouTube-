@@ -30,7 +30,6 @@ def _get(path: str, token: str, **params) -> dict:
 def get_ig_user_id(token: str) -> str:
     """認証済みユーザーの Instagram ユーザー ID を返す。"""
     data = _get("/me", token, fields="id,username")
-    print(f"      [DEBUG] /me レスポンス: id={data.get('id')} username={data.get('username')}")
     return data["id"]
 
 
@@ -43,10 +42,8 @@ def iter_new_unanswered_comments(
     早期終了は使わず、全件取得してから Python 側で日時フィルタリングする。
     """
     cutoff = datetime.fromisoformat(published_after.replace("Z", "+00:00"))
-    print(f"      [DEBUG] cutoff = {cutoff.isoformat()}")
 
     media_ids = _fetch_all_media_ids(token, ig_user_id)
-    print(f"      [DEBUG] 取得した投稿数: {len(media_ids)}")
 
     for media_id in media_ids:
         yield from _iter_comments_for_media(token, media_id, cutoff)
@@ -65,7 +62,6 @@ def _fetch_all_media_ids(token: str, ig_user_id: str) -> list[str]:
         data = _get(f"/{ig_user_id}/media", token, **params)
         page_ids = [item["id"] for item in data.get("data", [])]
         ids.extend(page_ids)
-        print(f"      [DEBUG] 投稿ページ取得: {len(page_ids)} 件（累計 {len(ids)} 件）")
 
         cursors = data.get("paging", {}).get("cursors", {})
         after = cursors.get("after")
@@ -100,7 +96,6 @@ def _iter_comments_for_media(
             data = _get(f"/{media_id}/comments", token, **params)
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code in (400, 404):
-                print(f"      [DEBUG] 投稿 {media_id}: コメント取得スキップ (HTTP {e.response.status_code})")
                 break
             raise
 
@@ -117,16 +112,18 @@ def _iter_comments_for_media(
                 if ts <= cutoff:
                     continue
 
+            # 自アカウントのコメントはスキップ（二重返信防止）
+            if item.get("username") == "hadou_tendou":
+                continue
+
             # すでに返信があるコメントはスキップ
             replies_data = item.get("replies", {}).get("data", [])
             if replies_data:
-                print(f"      [DEBUG] コメント {item['id']}: 返信済みのためスキップ")
                 continue
 
             if not text:
                 continue
 
-            print(f"      [DEBUG] 新着コメント発見: id={item['id']} ts={ts_str} text={text[:40]}")
             total_yielded += 1
             yield IgComment(
                 comment_id=item["id"],
@@ -140,9 +137,6 @@ def _iter_comments_for_media(
         after = cursors.get("after")
         if not after or not data.get("paging", {}).get("next"):
             break
-
-    if total_fetched > 0:
-        print(f"      [DEBUG] 投稿 {media_id}: 取得 {total_fetched} 件 → 新着未返信 {total_yielded} 件")
 
 
 def post_reply(token: str, comment_id: str, reply_text: str) -> Optional[str]:
